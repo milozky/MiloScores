@@ -2,6 +2,9 @@
 
 A modern Android application that keeps you updated with live match scores and notifications. Built with clean architecture principles and modern Android development practices.
 
+![video_2025-06-16_19-11-06](https://github.com/user-attachments/assets/ce0bad4c-3c40-42d4-8eb3-280dc7e2b5f8)
+
+
 ## Features
 
 - 📊 Live match scores
