@@ -31,84 +31,158 @@ A modern Android application that keeps you updated with live match scores and n
 
 ## Architecture
 
-This app follows Clean Architecture principles and MVI pattern:
+The app follows Clean Architecture principles with a clear separation of concerns:
+
+### Data Flow
 
 ```
-app
-├── data
-│   ├── api
-│   ├── db
-│   ├── repository
-│   └── model
-├── domain
-│   ├── model
-│   ├── repository
-│   └── usecase
-├── presentation
-│   ├── ui
-│   ├── viewmodel
-│   └── state
-└── di
+API (MatchApiService)
+    ↓
+Repository (MatchRepositoryImpl)
+    ↓
+ViewModel (MatchViewModel)
+    ↓
+UI (MatchScreen)
 ```
 
-### Clean Architecture Layers
+### Layer Details
 
-1. **Presentation Layer**
-   - UI components (Compose)
-   - ViewModels
-   - UI State
-   - MVI implementation
+1. **API Layer** (`MatchApiService.kt`):
+   - Interface defining API endpoints
+   - Uses Retrofit for HTTP requests
+   - Handles raw API responses
+   ```kotlin
+   interface MatchApiService {
+       @GET("fixtures")
+       suspend fun getLiveMatches(
+           @Query("live") live: String = "all"
+       ): ApiResponse<List<MatchResponse>>
+   }
+   ```
 
-2. **Domain Layer**
-   - Business logic
-   - Use cases
-   - Domain models
-   - Repository interfaces
+2. **Repository Layer** (`MatchRepositoryImpl.kt`):
+   - Middleman between API and app
+   - Converts API data to domain models
+   - Handles error cases
+   ```kotlin
+   class MatchRepositoryImpl(
+       private val apiService: MatchApiService
+   ) : MatchRepository {
+       override fun getMatches(): Flow<List<Match>> = flow {
+           try {
+               val response = apiService.getLiveMatches()
+               val matches = response.response.map { matchResponse ->
+                   Match(
+                       id = matchResponse.fixture.id.toString(),
+                       homeTeam = matchResponse.teams.home.name,
+                       awayTeam = matchResponse.teams.away.name,
+                       homeScore = matchResponse.goals.home,
+                       awayScore = matchResponse.goals.away,
+                       status = when (matchResponse.fixture.status.short) {
+                           "1H", "2H", "HT" -> MatchStatus.LIVE
+                           "FT" -> MatchStatus.FINISHED
+                           "CANC" -> MatchStatus.CANCELLED
+                           else -> MatchStatus.SCHEDULED
+                       },
+                       startTime = matchResponse.fixture.timestamp * 1000L,
+                       endTime = null
+                   )
+               }
+               emit(matches)
+           } catch (e: Exception) {
+               emit(emptyList())
+           }
+       }
+   }
+   ```
 
-3. **Data Layer**
-   - Repository implementations
-   - Data sources (Remote & Local)
-   - Data models
-   - API services
+3. **ViewModel Layer** (`MatchViewModel.kt`):
+   - Manages UI state
+   - Handles data operations
+   - Provides data to UI
+   ```kotlin
+   class MatchViewModel(
+       private val getMatchesUseCase: GetMatchesUseCase
+   ) : ViewModel() {
+       private val _matches = MutableStateFlow<List<Match>>(emptyList())
+       val matches: StateFlow<List<Match>> = _matches.asStateFlow()
 
-## SOLID Principles Implementation
+       init {
+           viewModelScope.launch {
+               getMatchesUseCase().collect { matches ->
+                   _matches.value = matches
+               }
+           }
+       }
+   }
+   ```
 
-- **Single Responsibility**: Each class has a single responsibility
-- **Open/Closed**: Use of interfaces and abstractions
-- **Liskov Substitution**: Proper inheritance and interface implementation
-- **Interface Segregation**: Specific interfaces for different use cases
-- **Dependency Inversion**: Dependency injection with Koin
+4. **UI Layer** (`MatchScreen.kt`):
+   - Displays data to user
+   - Handles user interactions
+   - Uses Jetpack Compose
+   ```kotlin
+   @Composable
+   fun MatchScreen(
+       viewModel: MatchViewModel = koinViewModel()
+   ) {
+       val matches by viewModel.matches.collectAsState()
+       
+       LazyColumn {
+           items(matches) { match ->
+               MatchItem(match = match)
+           }
+       }
+   }
+   ```
 
-## Getting Started
+## Key Features
 
-### Prerequisites
+- Live match scores
+- Match status tracking
+- Clean, modern UI with Jetpack Compose
+- Reactive updates using Kotlin Flow
+- Error handling at each layer
+- Dependency injection with Koin
 
-- Android Studio Hedgehog | 2023.1.1 or later
-- JDK 17 or later
-- Android SDK 34 or later
-
-### Installation
+## Setup
 
 1. Clone the repository
-```bash
-git clone https://github.com/milozky/MiloScores.git
-```
+2. Create a `local.properties` file in the root directory
+3. Add your API key:
+   ```properties
+   FOOTBALL_API_KEY=your_api_key_here
+   ```
+4. Build and run the project
 
-2. Open the project in Android Studio
+## Dependencies
 
-3. Build and run the app
+- Kotlin Coroutines
+- Jetpack Compose
+- Retrofit
+- Koin
+- Kotlin Flow
+- Material Design 3
+
+## Architecture Benefits
+
+- **Separation of Concerns**: Each layer has a specific responsibility
+- **Testability**: Layers can be tested independently
+- **Maintainability**: Changes in one layer don't affect others
+- **Scalability**: Easy to add new features or modify existing ones
+- **Error Handling**: Built-in error handling at each level
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+This project is licensed under the MIT License - see the LICENSE file for details
 
 ## Acknowledgments
 
